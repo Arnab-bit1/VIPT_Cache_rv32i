@@ -1,0 +1,243 @@
+`timescale 1ns / 1ps
+
+module tb_cpu_system_top_eviction;
+
+    logic clk;
+    logic rst_n;
+
+    initial clk = 0;
+    always #5 clk = ~clk; // 100 MHz clock
+
+    wire        ext_mem_read_req;
+    wire [12:0] ext_mem_read_addr;
+    wire [31:0] ext_mem_read_data;
+    wire        ext_mem_read_valid;
+
+    wire        ext_mem_write_req;
+    wire [12:0] ext_mem_write_addr;
+    wire [31:0] ext_mem_write_data;
+    wire        ext_mem_write_done;
+    wire [31:0] debug_pc;
+    wire waitrequest;
+    wire dmem_wr, imem_wr;
+    wire dmem_req, dmem_we;
+
+    // Device Under Test (ASIC Core)
+    cpu_system_top DUT (
+        .clk(clk),
+        .rst_n(rst_n),
+        .debug_pc(debug_pc),
+        .cpu_rdata(cpu_rdata),
+        .ext_mem_read_req(ext_mem_read_req),
+        .ext_mem_read_addr(ext_mem_read_addr),
+        .ext_mem_read_data(ext_mem_read_data),
+        .ext_mem_read_valid(ext_mem_read_valid),
+        .ext_mem_write_req(ext_mem_write_req),
+        .ext_mem_write_addr(ext_mem_write_addr),
+        .ext_mem_write_data(ext_mem_write_data),
+        .ext_mem_write_done(ext_mem_write_done),
+        .wr(waitrequest),
+        .dmem_wr(dmem_wr),
+        .imem_wr(imem_wr),
+        .d_req(dmem_req),
+        .d_we(dmem_we)
+    );
+
+    // External Memory Model
+    main_memory MEM (
+        .clk(clk),
+        .rst_n(rst_n),
+        .read_req(ext_mem_read_req),
+        .read_addr(ext_mem_read_addr),
+        .read_data(ext_mem_read_data),
+        .read_valid(ext_mem_read_valid),
+        .write_req(ext_mem_write_req),
+        .write_addr(ext_mem_write_addr),
+        .write_data(ext_mem_write_data),
+        .write_done(ext_mem_write_done)
+    );
+    int cycle_count;
+    int page_walks;
+    int cache_hits;
+    int cache_misses;
+    
+    wire imem_req = DUT.dmem_waitrequest;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            cycle_count  <= 0;
+            page_walks   <= 0;
+            cache_hits   <= 0;
+            cache_misses <= 0;
+        end else begin
+            cycle_count <= cycle_count + 1;
+
+            if (DUT.ARBITER.m0_req && DUT.ARBITER.state == DUT.ARBITER.IDLE)
+                page_walks <= page_walks + 1;
+
+            if (DUT.CACHE.cpu_request && DUT.CACHE.cache_hit)
+                cache_hits <= cache_hits + 1;
+
+            if (DUT.CACHE.cpu_request && !DUT.CACHE.cache_hit && DUT.CACHE.cache_busy)
+                cache_misses <= cache_misses + 1;
+        end
+    end
+
+    task automatic setup_memory();
+        integer i;
+        for (i = 0; i < 8192; i = i + 1) begin
+            MEM.mem[i]  = 32'h0000_0000;
+        end
+        for (i = 0; i < 1024; i = i + 1) begin
+            DUT.IMEM.rom[i] = 32'h0000_0013; // NOP
+        end
+
+        // ------------------------------------------------------------
+        // Frame 0 (Words 0..1023): Root Page Table (PPN = 0)
+        // Entry 0 (VPN[1] = 0): Points to Level 0 table at Frame 1 (PPN = 1)
+        // Bits [29:10] = 20'h00001
+        // Bits [9:0]   = 10'h001 (V=1, R=0, W=0, X=0 -> Pointer)
+        // ------------------------------------------------------------
+        MEM.mem[0] = {2'b00, 20'h00001, 10'h001}; // 32'h0000_0401
+
+        // ------------------------------------------------------------
+        // Frame 1 (Words 1024..2047): Level 0 Page Table (PPN = 1)
+        // Base word address = 1024
+        // Leaf PTE Flags = 10'h00F (V=1, R=1, W=1, X=1)
+        // ------------------------------------------------------------
+        MEM.mem[1024 + 0] = {2'b00, 20'h00002, 10'h00F}; // VPN 0 -> Frame 2 (PPN 2, Word 2048)
+        MEM.mem[1024 + 1] = {2'b00, 20'h00003, 10'h00F}; // VPN 1 -> Frame 3 (PPN 3, Word 3072)
+        MEM.mem[1024 + 2] = {2'b00, 20'h00004, 10'h00F}; // VPN 2 -> Frame 4 (PPN 4, Word 4096)
+        MEM.mem[1024 + 3] = {2'b00, 20'h00005, 10'h00F}; // VPN 3 -> Frame 5 (PPN 5, Word 5120)
+        MEM.mem[1024 + 4] = {2'b00, 20'h00006, 10'h00F}; // VPN 4 -> Frame 6 (PPN 6, Word 6144)
+
+        // ------------------------------------------------------------
+        // Preload Backing Data (Offset 16 = Word 4 of each frame)
+        // ------------------------------------------------------------
+        MEM.mem[2048 + 4] = 32'h0000_0011; // Frame 2 (0x11)
+        MEM.mem[3072 + 4] = 32'h0000_0022; // Frame 3 (0x22)
+        MEM.mem[4096 + 4] = 32'h0000_0033; // Frame 4 (0x33)
+        MEM.mem[5120 + 4] = 32'h0000_0044; // Frame 5 (0x44)
+        MEM.mem[6144 + 4] = 32'h0000_0055; // Frame 6 (0x55)
+
+        // Keep the rest of your assembly program targeting offset 16 (0x10)
+        // ...
+        // --------------------------------------------------------------------
+        // PHASE 0: Initialize Error Register
+        // --------------------------------------------------------------------
+        // Phase 0: Clear error accumulator
+        DUT.IMEM.rom[0]  = 32'h00000393; // 0x00: addi x7, x0, 0
+        
+        // Phase 1: Allocate Ways 0 to 3 using LOADS (Triggers 16-word refills into each way)
+        DUT.IMEM.rom[1]  = 32'h01002083; // 0x04: lw   x1, 16(x0)  -> VA 0x0010 (Allocates Way 0 with 0x11)
+        DUT.IMEM.rom[2]  = 32'h00001237; // 0x08: lui  x4, 1       (x4 = 0x1000)
+        DUT.IMEM.rom[3]  = 32'h01022083; // 0x0C: lw   x1, 16(x4)  -> VA 0x1010 (Allocates Way 1 with 0x22)
+        DUT.IMEM.rom[4]  = 32'h00002237; // 0x10: lui  x4, 2       (x4 = 0x2000)
+        DUT.IMEM.rom[5]  = 32'h01022083; // 0x14: lw   x1, 16(x4)  -> VA 0x2010 (Allocates Way 2 with 0x33)
+        DUT.IMEM.rom[6]  = 32'h00003237; // 0x18: lui  x4, 3       (x4 = 0x3000)
+        DUT.IMEM.rom[7]  = 32'h01022083; // 0x1C: lw   x1, 16(x4)  -> VA 0x3010 (Allocates Way 3 -> SET 0 FULL)
+        
+        // Phase 2: Capacity Eviction (5th access into Set 0 evicts Way 0)
+        DUT.IMEM.rom[8]  = 32'h00004237; // 0x20: lui  x4, 4       (x4 = 0x4000)
+        DUT.IMEM.rom[9]  = 32'h01022083; // 0x24: lw   x1, 16(x4)  -> VA 0x4010 (Evicts Way 0, loads 0x55)
+        
+        // Phase 3: Verify Way 1 still hits in cache (VA 0x1010 must return 34 / 0x22)
+        DUT.IMEM.rom[10] = 32'h00001237; // 0x28: lui  x4, 1
+        DUT.IMEM.rom[11] = 32'h01022103; // 0x2C: lw   x2, 16(x4)  (Expect HIT: 34)
+        DUT.IMEM.rom[12] = 32'h02200293; // 0x30: addi x5, x0, 34
+        DUT.IMEM.rom[13] = 32'h40510333; // 0x34: sub  x6, x2, x5
+        DUT.IMEM.rom[14] = 32'h0063e3b3; // 0x38: or   x7, x7, x6  (Accumulate error)
+        
+        // Phase 4: Verify Way 2 still hits in cache (VA 0x2010 must return 51 / 0x33)
+        DUT.IMEM.rom[15] = 32'h00002237; // 0x3C: lui  x4, 2
+        DUT.IMEM.rom[16] = 32'h01022103; // 0x40: lw   x2, 16(x4)  (Expect HIT: 51)
+        DUT.IMEM.rom[17] = 32'h03300293; // 0x44: addi x5, x0, 51
+        DUT.IMEM.rom[18] = 32'h40510333; // 0x48: sub  x6, x2, x5
+        DUT.IMEM.rom[19] = 32'h0063e3b3; // 0x4C: or   x7, x7, x6
+        
+        // Phase 5: Reload evicted Way 0 line (VA 0x0010 must MISS and reload 17 / 0x11)
+        DUT.IMEM.rom[20] = 32'h01002103; // 0x50: lw   x2, 16(x0)  (Expect MISS & REFILL: 17)
+        DUT.IMEM.rom[21] = 32'h01100293; // 0x54: addi x5, x0, 17
+        DUT.IMEM.rom[22] = 32'h40510333; // 0x58: sub  x6, x2, x5
+        DUT.IMEM.rom[23] = 32'h0063e3b3; // 0x5C: or   x7, x7, x6
+        
+        // Phase 6: Branch to pass/fail mailbox
+        DUT.IMEM.rom[24] = 32'h00039863; // 0x60: bne  x7, x0, +16 (Target 0x70)
+        
+        // PASS (VA 0x0018 <= 1)
+        DUT.IMEM.rom[25] = 32'h00100193; // 0x64: addi x3, x0, 1
+        DUT.IMEM.rom[26] = 32'h00302c23; // 0x68: sw   x3, 24(x0)
+        DUT.IMEM.rom[27] = 32'h0000006f; // 0x6C: jal  x0, 0
+        
+        // FAIL (VA 0x0018 <= 2)
+        DUT.IMEM.rom[28] = 32'h00200193; // 0x70: addi x3, x0, 2
+        DUT.IMEM.rom[29] = 32'h00302c23; // 0x74: sw   x3, 24(x0)
+        DUT.IMEM.rom[30] = 32'h0000006f; // 0x78: jal  x0, 0
+    endtask
+
+    initial begin
+        $display("-------------------------------------------------------------");
+        $display("   STARTING 4-WAY EVICTION & CONFLICT MISS STRESS TEST");
+        $display("-------------------------------------------------------------");
+
+        rst_n = 1'b0;
+        setup_memory();
+
+        #50;
+        @(negedge clk);
+        rst_n = 1'b1;
+        $display("[%0t ns] Reset released. Executing eviction sequence...", $time);
+
+        fork
+            begin : WATCHDOG
+                #100000; // 10,000 cycles
+                $display("\n[ERROR] Simulation timeout reached!");
+                $display("Status at Hang:");
+                $display("  PC               : 0x%08h", DUT.CPU.pc);
+                $display("  Target VA        : 0x%08h", DUT.CACHE.va);
+                $display("  Cache Busy       : %b",      DUT.CACHE.cache_busy);
+                $display("  Cache Fault      : %b",      DUT.CACHE.cache_fault);
+                $display("  Arbiter State    : %0d",     DUT.ARBITER.state);
+                $display("  Page Walks Done  : %0d",     page_walks);
+                $display("  PW Mem Req       : %b",      DUT.pw_mem_req);
+                $display("  PW Mem Addr      : 0x%08h",  DUT.pw_mem_addr);
+                $finish;
+            end
+
+            begin : MONITOR
+                forever begin
+                    @(posedge clk);
+                    // Detect signature write at VA 0x0018 (offset 24)
+                    if (DUT.CACHE.store_req && (DUT.CACHE.va == 32'h0000_0018) && DUT.CACHE.cache_done) begin
+                        #20;
+                        if (DUT.CACHE.cpu_wdata == 32'd1) begin
+                            $display("\n=============================================================");
+                            $display("   [PASS] 4-WAY REPLACEMENT & EVICTION VERIFIED CLEANLY!");
+                            $display("=============================================================");
+                            $finish;
+                        end else begin
+                            $display("\n=============================================================");
+                            $display("   [FAIL] READBACK ASSERTION FAILED!");
+                            $display("=============================================================");
+                            $display("  Error Accumulator (x7) : 0x%08h", DUT.CPU.Reg[7]);
+                            $display("  Last Loaded Value (x2) : 0x%08h (%0d)", DUT.CPU.Reg[2], DUT.CPU.Reg[2]);
+                            $display("  Expected Value    (x5) : 0x%08h (%0d)", DUT.CPU.Reg[5], DUT.CPU.Reg[5]);
+                            $display("  Way 0 Valid Bit        : %b", DUT.CACHE.valid_mem[0][0]);
+                            $display("  Way 1 Valid Bit        : %b", DUT.CACHE.valid_mem[0][1]);
+                            $display("  Way 2 Valid Bit        : %b", DUT.CACHE.valid_mem[0][2]);
+                            $display("  Way 3 Valid Bit        : %b", DUT.CACHE.valid_mem[0][3]);
+                            $display("=============================================================\n");
+                            disable WATCHDOG;
+                            $finish;
+                        end
+                    end 
+                end
+            end
+        join
+    end
+    
+    initial begin 
+        $monitor("PC: %h, REG[2]: %h, W0_DOUT: %h, W1_DOUT: %h", debug_pc, DUT.CPU.Reg[2], DUT.CACHE.SRAM_W0.data_out, DUT.CACHE.SRAM_W1.data_out);
+    end 
+
+endmodule

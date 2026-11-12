@@ -1,0 +1,63 @@
+{
+    "DESIGN_NAME": "cpu_system_top",
+    "VERILOG_FILES": [
+        "dir::srcs/pipelined_processor.v",
+        "dir::srcs/instruction_memory_wrapper.sv",
+        "dir::srcs/tag_sram.sv",
+        "dir::srcs/cache_sram.sv",
+        "dir::srcs/mmu_controller.sv",
+        "dir::srcs/mem_arbiter.sv",
+        "dir::srcs/vipt_cache.sv",
+        "dir::srcs/cpu_system_top.sv",
+        "dir::srcs/mmu_table.sv",
+        "dir::srcs/page_table.sv"
+    ],
+    "CLOCK_PORT": "clk",
+    "CLOCK_PERIOD": 14.0,
+
+    "RUN_LINTER": 0,
+
+    "SYNTH_DEFINES": ["SYNTHESIS"],
+    "SYNTH_READ_BLACKBOX_LIB": 1,
+
+    "EXTRA_LEFS": [
+        "/home/arnab/pdk/ciel/sky130/versions/e8294524e5f67c533c5d0c3afa0bcc5b2a5fa066/sky130A/libs.ref/sky130_sram_macros/lef/sky130_sram_2kbyte_1rw1r_32x512_8.lef"
+    ],
+    "EXTRA_LIBS": [
+        "/home/arnab/pdk/ciel/sky130/versions/e8294524e5f67c533c5d0c3afa0bcc5b2a5fa066/sky130A/libs.ref/sky130_sram_macros/lib/sky130_sram_2kbyte_1rw1r_32x512_8_TT_1p8V_25C.lib"
+    ],
+    "EXTRA_GDS_FILES": [
+        "/home/arnab/pdk/ciel/sky130/versions/e8294524e5f67c533c5d0c3afa0bcc5b2a5fa066/sky130A/libs.ref/sky130_sram_macros/gds/sky130_sram_2kbyte_1rw1r_32x512_8.gds"
+    ],
+    "EXTRA_SPICES": [
+        "/home/arnab/pdk/ciel/sky130/versions/e8294524e5f67c533c5d0c3afa0bcc5b2a5fa066/sky130A/libs.ref/sky130_sram_macros/spice/sky130_sram_2kbyte_1rw1r_32x512_8.spice"
+    ],
+    "LVS_INSERT_POWER_PINS": 1,
+    "LVS_CONNECT_PINS_BY_NAME": 1,
+
+    "DIE_AREA": "0 0 2200 2200",
+    "CORE_AREA": "35 35 2165 2165",
+
+    "MACRO_PLACEMENT_CFG": "dir::macro_placement.cfg",
+    "PL_MACRO_HALO": "60 20",
+    "PL_MACRO_CHANNEL": "40 40",
+
+    "GRT_ALLOW_CONGESTION": 1,
+    "GRT_MACRO_EXTENSION": 0,
+    "GRT_OVERFLOW_ITERS": 100,
+    "PL_TARGET_DENSITY": 0.08,
+    "PL_BASIC_PLACEMENT": 0,
+    "GRT_OBS": "met3 739.0 157.28 742.58 160.5",
+
+
+    "MAGIC_DRC_USE_GDS": 0,
+    "RUN_MAGIC_DRC": 1,
+    "RUN_KLAYOUT_DRC": 0,
+    "KLAYOUT_DRC_KLAYOUT_GDS": 0,
+
+   "FP_PDN_ENABLE_MACROS_GRID": 1,
+   "FP_PDN_MACRO_HOOKS": "CACHE.SRAM_W0.BANK0 VPWR VGND vccd1 vssd1, CACHE.SRAM_W0.BANK1 VPWR VGND vccd1 vssd1, CACHE.SRAM_W1.BANK0 VPWR VGND vccd1 vssd1, CACHE.SRAM_W1.BANK1 VPWR VGND vccd1 vssd1, CACHE.SRAM_W2.BANK0 VPWR VGND vccd1 vssd1, CACHE.SRAM_W2.BANK1 VPWR VGND vccd1 vssd1, CACHE.SRAM_W3.BANK0 VPWR VGND vccd1 vssd1, CACHE.SRAM_W3.BANK1 VPWR VGND vccd1 vssd1",
+
+    "RUN_CVC": 0,
+    "RUN_KLAYOUT_XOR": 0
+}
