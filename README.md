@@ -2,13 +2,6 @@
 
 <h1 align="center">RV32I Pipelined Processor with VIPT Cache</h1>
 
-<div align="center">
-  <a href="https://github.com/yourusername/cpu_system_top/stargazers"><img src="https://img.shields.io/github/stars/yourusername/cpu_system_top?style=for-the-badge&color=facc15" alt="Stars Badge"/></a>
-  <a href="https://github.com/yourusername/cpu_system_top/network/members"><img src="https://img.shields.io/github/forks/yourusername/cpu_system_top?style=for-the-badge&color=3b82f6" alt="Forks Badge"/></a>
-  <a href="https://github.com/yourusername/cpu_system_top/pulls"><img src="https://img.shields.io/github/issues-pr/yourusername/cpu_system_top?style=for-the-badge&color=22c55e" alt="Pull Requests Badge"/></a>
-  <a href="https://github.com/yourusername/cpu_system_top/blob/master/LICENSE"><img src="https://img.shields.io/github/license/yourusername/cpu_system_top?style=for-the-badge&color=ef4444" alt="License Badge"/></a>
-</div>
-
 <br>
 
 <p align="center">
