@@ -28,13 +28,17 @@
 * **MMU & Page Walker:** Hardware-managed page tables supporting fast virtual-to-physical address translation.
 * **ASIC Ready:** Full RTL-to-GDSII flow completed. Clean LVS, 0 DRC violations, and timing closure (setup/hold) using OpenLane.
 
+## Simulation Waveform
+
+> `<img src = "docs/waveform_snippet.png">
+
 ## 🏗️ Architecture Overview
 
 The `cpu_system_top` module integrates the core CPU datapath with the memory subsystem. The design successfully incorporates 8 pre-compiled 2 KiB SRAM macros (`sky130_sram_2kbyte_1rw1r_32x512_8`) efficiently placed to minimize wire routing congestion and wide-metal (`met3.3d`) DRC rules.
 
-> **Note:** Architecture diagrams (RTL block diagrams or GDSII layout screenshots) go here.
 > 
-> `<img src="docs/assets/gds_layout.png" alt="GDSII Layout" width="600"/>`
+>
+<img src="docs/layout.png">
 
 ## 🛠️ Tech Stack & Tools
 
